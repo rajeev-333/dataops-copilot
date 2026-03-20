@@ -1,2 +1,3 @@
-libsqlite3-dev
 libffi-dev
+libsqlite3-dev
+gcc
