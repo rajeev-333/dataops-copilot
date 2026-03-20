@@ -1,0 +1,59 @@
+POWER GRID MONITORING SYSTEM — OPERATIONAL MANUAL
+
+SECTION 1: SENSOR THRESHOLDS AND ANOMALY DEFINITIONS
+
+Voltage Anomaly:
+A voltage reading is classified as ANOMALY when it exceeds 255V or drops below 200V.
+Normal operating voltage range is 220V to 240V.
+Voltage spikes above 260V indicate critical fault conditions requiring immediate shutdown.
+
+Current Anomaly:
+Current readings above 20A or below 5A are flagged as anomalies.
+Normal operating current is between 10A and 18A.
+
+Frequency Anomaly:
+Grid frequency must remain between 49.5 Hz and 50.5 Hz.
+Deviations beyond this range indicate load imbalance.
+
+Temperature Anomaly:
+Sensor temperature above 60°C is classified as ANOMALY.
+Normal operating temperature range is 30°C to 55°C.
+Temperatures above 70°C trigger automatic sensor shutdown.
+
+SECTION 2: SENSOR TYPES AND LOCATIONS
+
+Voltage Monitor (Type: Voltage_Monitor):
+Installed at Substation_A and Substation_D.
+Measures AC voltage every hour. Reports to central SCADA system.
+
+Current Monitor (Type: Current_Monitor):
+Installed at Substation_B.
+Measures load current and reports power factor every hour.
+
+Frequency Monitor (Type: Frequency_Monitor):
+Installed at Substation_C.
+Tracks grid frequency stability and reports deviation events.
+
+Temperature Monitor (Type: Temperature_Monitor):
+Installed at Substation_E. Currently inactive (is_active = 0).
+Was decommissioned due to repeated overheating faults.
+
+SECTION 3: MAINTENANCE PROTOCOLS
+
+Routine Maintenance:
+All active sensors undergo maintenance every 90 days.
+Maintenance involves calibration, firmware update, and physical inspection.
+
+Emergency Protocol:
+If 3 or more ANOMALY readings are recorded within 1 hour from the same sensor,
+an emergency alert is raised and the sensor is isolated from the grid.
+
+Data Retention:
+Sensor readings are retained for 90 days in the primary database.
+Archived data beyond 90 days is moved to cold storage.
+
+SECTION 4: ESCALATION CONTACTS
+
+Level 1 (NORMAL anomaly): Grid Operations Team — response within 4 hours.
+Level 2 (voltage > 260V or temp > 70°C): Senior Engineer on-call — response within 30 minutes.
+Level 3 (full substation fault): Emergency Response Team — response within 10 minutes.
