@@ -10,7 +10,14 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 
-load_dotenv()
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
+try:
+    import streamlit as st
+    if "GROQ_API_KEY" in st.secrets:
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+except Exception:
+    pass
 
 DOCS_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'docs')
 VECTORSTORE_PATH = os.path.join(os.path.dirname(__file__), '..', 'vectorstore')

@@ -22,6 +22,14 @@ from agents.report_agent import generate_report
 from pathlib import Path
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
+# Support Streamlit Cloud secrets
+try:
+    import streamlit as st
+    if "GROQ_API_KEY" in st.secrets:
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+except Exception:
+    pass
+
 # ── State shared across all agents ──────────────────────────────────────────
 class GraphState(TypedDict):
     question: str
