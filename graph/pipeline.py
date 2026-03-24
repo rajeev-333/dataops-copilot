@@ -32,19 +32,19 @@ def supervisor_node(state: GraphState) -> GraphState:
                 api_key=os.getenv("GROQ_API_KEY")
             )
             prompt = ChatPromptTemplate.from_messages([
-                ("system", """Classify the question into ONE of: sql, rag, both
+                ("system", """Classify the question. Reply with ONE word only: sql, rag, or both
 
-sql → needs live database data (counts, values, records, highest, lowest, average)
-rag → needs documentation (thresholds, protocols, procedures, rules, why a sensor is inactive)
-both → needs both database AND documentation
+sql → needs live data (counts, values, highest, lowest, average, how many, which sensor)
+rag → needs documentation (thresholds, protocols, rules, procedures, why inactive)
+both → needs live data AND documentation (summarize + protocol, compare data with rules)
 
 Examples:
 "How many anomalies?" → sql
 "What is voltage threshold?" → rag
 "Which sensor is inactive and why?" → rag
 "Summarize anomaly situation and protocol" → both
-
-Reply with ONLY one word: sql, rag, or both"""),
+"Which location has most anomalies?" → sql
+"What is the average temperature?" → sql"""),
                 ("human", "{question}")
             ])
             chain = prompt | llm
@@ -78,12 +78,28 @@ def rag_node(state: GraphState) -> GraphState:
     print("\n📄 RAG Agent searching docs...\n")
     from agents.rag_agent import get_rag_answer
     result = get_rag_answer(state["question"])
+    if "RAG_FAILED" in result:
+        return {**state, "rag_answer": None}
     return {**state, "rag_answer": result}
+
+def both_node(state: GraphState) -> GraphState:
+    """Runs SQL + RAG sequentially for 'both' intent"""
+    print("\n🔄 BOTH: Running SQL + RAG...\n")
+    from agents.sql_agent import get_sql_answer
+    from agents.rag_agent import get_rag_answer
+
+    sql_result = get_sql_answer(state["question"])
+    sql_answer = None if "SQL_FAILED" in sql_result else sql_result
+
+    rag_result = get_rag_answer(state["question"])
+    rag_answer = None if "RAG_FAILED" in rag_result else rag_result
+
+    return {**state, "sql_answer": sql_answer, "rag_answer": rag_answer}
 
 def dq_node(state: GraphState) -> GraphState:
     print("\n🔍 DQ Agent checking...\n")
     from agents.dq_agent import run_dq_check
-    result = run_dq_check(state.get("sql_answer", ""))
+    result = run_dq_check(state.get("sql_answer") or "")
     return {**state, "dq_report": result}
 
 def report_node(state: GraphState) -> GraphState:
@@ -102,23 +118,26 @@ def route_after_supervisor(state: GraphState) -> str:
 
 def build_graph():
     graph = StateGraph(GraphState)
+
     graph.add_node("supervisor", supervisor_node)
     graph.add_node("sql", sql_node)
     graph.add_node("rag", rag_node)
+    graph.add_node("both", both_node)
     graph.add_node("dq", dq_node)
     graph.add_node("report", report_node)
 
     graph.set_entry_point("supervisor")
+
     graph.add_conditional_edges("supervisor", route_after_supervisor, {
         "sql": "sql",
         "rag": "rag",
-        "both": "sql"
+        "both": "both"
     })
+
     graph.add_edge("sql", "dq")
+    graph.add_edge("both", "dq")
     graph.add_edge("dq", "report")
     graph.add_edge("rag", "report")
     graph.add_edge("report", END)
 
-    # For "both": after sql→dq→report but also need rag
-    # Override: both routes to sql first, then rag runs in report
     return graph.compile()
