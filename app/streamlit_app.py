@@ -74,9 +74,14 @@ if "messages" not in st.session_state:
         "trace": None
     })
 
+@st.cache_resource
+def load_graph():
+    return build_graph()
+
 if "graph" not in st.session_state:
     with st.spinner("🔧 Initializing agents..."):
-        st.session_state.graph = build_graph()
+        st.session_state.graph = load_graph()
+
 
 def run_agents(question):
     try:
