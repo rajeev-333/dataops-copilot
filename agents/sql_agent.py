@@ -30,13 +30,20 @@ def get_sql_answer(question: str) -> str:
 
             # Step 1: Generate SQL
             sql_prompt = ChatPromptTemplate.from_messages([
-                ("system", f"""You are an expert SQL generator. Given the schema below, write a single valid SQLite query.
-Return ONLY the raw SQL query — no explanation, no markdown, no backticks.
+    ("system", f"""You are an expert SQL generator for SQLite. Write a single valid SQLite query.
+Return ONLY the raw SQL — no explanation, no markdown, no backticks.
 
-Schema:
+IMPORTANT: The database has EXACTLY these tables:
+- sensor_readings (columns: id, sensor_id, location, timestamp, voltage, temperature, status)
+- sensors (columns: sensor_id, type, location, status)
+
+Never invent table names. Use ONLY the tables listed above.
+
+Full schema for reference:
 {schema}"""),
-                ("human", "{question}")
-            ])
+    ("human", "{question}")
+])
+
             sql_chain = sql_prompt | llm
             sql_response = sql_chain.invoke({"question": question})
             sql_query = sql_response.content.strip().strip("```sql").strip("```").strip()

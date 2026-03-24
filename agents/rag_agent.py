@@ -17,18 +17,18 @@ def _build_vectorstore():
     from langchain_community.document_loaders import TextLoader
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain_huggingface import HuggingFaceEmbeddings
-    from langchain_chroma import Chroma
-    print("📚 Building vectorstore...")
+    from langchain_community.vectorstores import FAISS
+
+    print("📚 Building FAISS vectorstore...")
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     loader = TextLoader(DOCS_PATH, encoding="utf-8")
     docs = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     chunks = splitter.split_documents(docs)
-    vs = Chroma.from_documents(documents=chunks, embedding=embeddings)
-    print(f"✅ Vectorstore ready: {len(chunks)} chunks")
+    vs = FAISS.from_documents(documents=chunks, embedding=embeddings)
+    print(f"✅ FAISS vectorstore ready: {len(chunks)} chunks")
     return vs
 
-# Use Streamlit cache so vectorstore survives reruns
 try:
     import streamlit as st
     @st.cache_resource
