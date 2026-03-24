@@ -2,12 +2,6 @@ import os, sys, time
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from dotenv import load_dotenv
 from pathlib import Path
-from langchain_groq import ChatGroq
-from langchain_community.document_loaders import TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
-from langchain_core.prompts import ChatPromptTemplate
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 try:
@@ -19,34 +13,48 @@ except Exception:
 
 DOCS_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'docs', 'grid_manual.txt'))
 
-_vectorstore = None
-
-def get_vectorstore():
-    global _vectorstore
-    if _vectorstore is not None:
-        return _vectorstore
-    print("📚 Building vectorstore from docs...")
+def _build_vectorstore():
+    from langchain_community.document_loaders import TextLoader
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_chroma import Chroma
+    print("📚 Building vectorstore...")
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     loader = TextLoader(DOCS_PATH, encoding="utf-8")
     docs = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     chunks = splitter.split_documents(docs)
-    # In-memory only — works on any filesystem
-    _vectorstore = Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings
-    )
-    print(f"✅ Vectorstore ready with {len(chunks)} chunks")
-    return _vectorstore
+    vs = Chroma.from_documents(documents=chunks, embedding=embeddings)
+    print(f"✅ Vectorstore ready: {len(chunks)} chunks")
+    return vs
+
+# Use Streamlit cache so vectorstore survives reruns
+try:
+    import streamlit as st
+    @st.cache_resource
+    def get_vectorstore():
+        return _build_vectorstore()
+except Exception:
+    _vs_cache = None
+    def get_vectorstore():
+        global _vs_cache
+        if _vs_cache is None:
+            _vs_cache = _build_vectorstore()
+        return _vs_cache
 
 def get_rag_answer(question: str) -> str:
     for attempt in range(3):
         try:
+            from langchain_groq import ChatGroq
+            from langchain_core.prompts import ChatPromptTemplate
+
             vectorstore = get_vectorstore()
             docs = vectorstore.similarity_search(question, k=4)
             if not docs:
-                return "RAG_FAILED: no relevant docs found"
+                return "This information is not in the documentation."
+
             context = "\n\n".join([d.page_content for d in docs])
+            print(f"📄 RAG context retrieved ({len(docs)} chunks)")
 
             llm = ChatGroq(
                 model="llama-3.1-8b-instant",
@@ -65,10 +73,11 @@ If the answer is not in the context, say: 'This information is not in the docume
 
         except Exception as e:
             err = str(e)
+            print(f"❌ RAG error (attempt {attempt+1}): {err[:150]}")
             if "429" in err or "rate limit" in err.lower():
                 wait = (attempt + 1) * 15
-                print(f"⏳ RAG rate limit. Waiting {wait}s...")
+                print(f"⏳ Waiting {wait}s...")
                 time.sleep(wait)
             else:
-                return f"RAG_FAILED: {err[:100]}"
+                return f"RAG could not retrieve answer: {err[:100]}"
     return "RAG_FAILED: rate limit after 3 retries"
