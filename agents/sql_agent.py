@@ -1,4 +1,4 @@
-import os, sys, time
+import os, sys, time, re
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from dotenv import load_dotenv
 from pathlib import Path
@@ -16,6 +16,23 @@ except Exception:
 
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'sensor_data.db'))
 
+# Known correct table names — add any others your DB has
+CORRECT_TABLES = ["sensor_readings", "sensors"]
+
+def fix_sql(sql: str) -> str:
+    """Auto-correct common LLM table name hallucinations."""
+    corrections = {
+        r'\bsensor_reading\b': 'sensor_readings',
+        r'\bsensors_data\b': 'sensor_readings',
+        r'\bsensor_data\b': 'sensor_readings',
+        r'\breading\b': 'sensor_readings',
+        r'\breadings\b': 'sensor_readings',
+        r'\bsensor_table\b': 'sensor_readings',
+    }
+    for pattern, replacement in corrections.items():
+        sql = re.sub(pattern, replacement, sql, flags=re.IGNORECASE)
+    return sql
+
 def get_sql_answer(question: str) -> str:
     for attempt in range(3):
         try:
@@ -30,27 +47,36 @@ def get_sql_answer(question: str) -> str:
 
             # Step 1: Generate SQL
             sql_prompt = ChatPromptTemplate.from_messages([
-    ("system", f"""You are an expert SQL generator for SQLite. Write a single valid SQLite query.
+                ("system", f"""You are an expert SQL generator for SQLite. Write a single valid SQLite query.
 Return ONLY the raw SQL — no explanation, no markdown, no backticks.
 
-IMPORTANT: The database has EXACTLY these tables:
-- sensor_readings (columns: id, sensor_id, location, timestamp, voltage, temperature, status)
-- sensors (columns: sensor_id, type, location, status)
+CRITICAL: The database has EXACTLY these tables (do NOT invent other names):
+- sensor_readings  (columns: id, sensor_id, location, timestamp, voltage, temperature, status)
+- sensors          (columns: sensor_id, type, location, status)
 
-Never invent table names. Use ONLY the tables listed above.
+Common aggregate examples:
+- Average temperature → SELECT AVG(temperature) FROM sensor_readings
+- Count anomalies    → SELECT COUNT(*) FROM sensor_readings WHERE status = 'ANOMALY'
+- Max voltage        → SELECT MAX(voltage) FROM sensor_readings
 
-Full schema for reference:
+Full schema:
 {schema}"""),
-    ("human", "{question}")
-])
+                ("human", "{question}")
+            ])
 
             sql_chain = sql_prompt | llm
             sql_response = sql_chain.invoke({"question": question})
             sql_query = sql_response.content.strip().strip("```sql").strip("```").strip()
 
+            # Step 2: Auto-correct table name hallucinations
+            sql_query_fixed = fix_sql(sql_query)
+            if sql_query_fixed != sql_query:
+                print(f"🔧 SQL auto-corrected: {sql_query} → {sql_query_fixed}")
+            sql_query = sql_query_fixed
+
             print(f"\n📝 Generated SQL: {sql_query}\n")
 
-            # Step 2: Execute SQL
+            # Step 3: Execute
             try:
                 result = db.run(sql_query)
             except Exception as sql_err:
@@ -59,7 +85,7 @@ Full schema for reference:
             if not result or result == "[]":
                 return "SQL_FAILED: query returned no results"
 
-            # Step 3: Format answer
+            # Step 4: Format answer
             answer_prompt = ChatPromptTemplate.from_messages([
                 ("system", "You are a data analyst. Answer the question clearly using the SQL result. Be concise and factual."),
                 ("human", "Question: {question}\nSQL: {sql}\nResult: {result}\n\nClear answer:")
