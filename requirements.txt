@@ -3,7 +3,7 @@ langchain
 langchain-community
 langchain-groq
 langchain-huggingface
-langchain-chroma
+langchain-text-splitters
 langgraph
 sentence-transformers
 faiss-cpu
