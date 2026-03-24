@@ -80,9 +80,14 @@ def supervisor_node(state: GraphState) -> GraphState:
 
 # ── Node 2: SQL Agent ────────────────────────────────────────────────────────
 def sql_node(state: GraphState) -> GraphState:
-    print("🗄️  SQL Agent: querying database...")
-    answer = sql_ask(state["question"])
-    return {**state, "sql_answer": answer}
+    print("\n🗄️  SQL Agent: querying database...\n")
+    from agents.sql_agent import get_sql_answer
+    result = get_sql_answer(state["question"])
+    if "SQL_FAILED" in result:
+        print("⚠️ SQL agent failed — will use RAG only if available")
+        return {**state, "sql_answer": None}
+    return {**state, "sql_answer": result}
+
 
 # ── Node 3: RAG Agent ────────────────────────────────────────────────────────
 def rag_node(state: GraphState) -> GraphState:
@@ -100,14 +105,33 @@ def dq_node(state: GraphState) -> GraphState:
 
 # ── Node 5: Report Agent ─────────────────────────────────────────────────────
 def report_node(state: GraphState) -> GraphState:
-    print("📋 Report Agent: generating final answer...")
-    final = generate_report(
-        question=state["question"],
-        sql_answer=state.get("sql_answer", ""),
-        rag_answer=state.get("rag_answer", ""),
-        dq_report=state.get("dq_report", "")
+    print("\n📋 Report Agent: generating final answer...\n")
+    llm = ChatGroq(
+        model="llama-3.1-8b-instant",
+        temperature=0,
+        api_key=os.getenv("GROQ_API_KEY")
     )
-    return {**state, "final_answer": final}
+
+    parts = []
+    if state.get("sql_answer"):
+        parts.append(f"Database Result:\n{state['sql_answer']}")
+    if state.get("rag_answer"):
+        parts.append(f"Documentation:\n{state['rag_answer']}")
+    if state.get("dq_report"):
+        parts.append(f"Data Quality:\n{state['dq_report']}")
+
+    if not parts:
+        return {**state, "final_answer": "⚠️ Could not retrieve an answer. Please try again in a moment."}
+
+    context = "\n\n".join(parts)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a Report Agent. Write a clear, concise answer using ONLY the provided data. Do not invent information."),
+        ("human", f"Question: {state['question']}\n\nAvailable data:\n{context}\n\nWrite a professional final answer.")
+    ])
+    chain = prompt | llm
+    response = chain.invoke({})
+    return {**state, "final_answer": response.content}
+
 
 # ── Routing Logic ────────────────────────────────────────────────────────────
 def route_after_supervisor(state: GraphState) -> str:
