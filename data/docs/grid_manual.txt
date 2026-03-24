@@ -19,7 +19,7 @@ Temperature Anomaly:
 Sensor temperature above 60°C is classified as ANOMALY.
 Normal operating temperature range is 30°C to 55°C.
 Temperatures above 70°C trigger automatic sensor shutdown.
-
+The temperature reading is in celsius. It's not in fahrenheit.
 SECTION 2: SENSOR TYPES AND LOCATIONS
 
 Voltage Monitor (Type: Voltage_Monitor):
